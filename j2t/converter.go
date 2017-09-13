@@ -7,7 +7,7 @@ import (
 )
 
 // JSON2HtmlTable convert json string to html table string
-func JSON2HtmlTable(jsonStr string) (bool, string) {
+func JSON2HtmlTable(jsonStr string, customTitles []string) (bool, string) {
 	htmlTable := ""
 	jsonArray := []map[string]interface{}{}
 	err := json.Unmarshal([]byte(jsonStr), &jsonArray)
@@ -16,8 +16,11 @@ func JSON2HtmlTable(jsonStr string) (bool, string) {
 		return false, htmlTable
 	}
 
+	titles := customTitles
+	if nil == customTitles || 0 == len(titles) { // if custom titles are not provided, use json keys as titles
+		titles = getKeys(jsonArray[0])
+	}
 	// convert table headers
-	titles := getKeys(jsonArray[0])
 	if 0 == len(titles) {
 		fmt.Println("json is not supported")
 	}
