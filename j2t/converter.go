@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sort"
 )
 
 // JSON2HtmlTable convert json string to html table string
-func JSON2HtmlTable(jsonStr string, customTitles []string) (bool, string) {
+func JSON2HtmlTable(jsonStr string, customTitles []string, rowSpanTitles []string) (bool, string) {
 	htmlTable := ""
 	jsonArray := []map[string]interface{}{}
 	err := json.Unmarshal([]byte(jsonStr), &jsonArray)
@@ -17,10 +18,12 @@ func JSON2HtmlTable(jsonStr string, customTitles []string) (bool, string) {
 	}
 
 	titles := customTitles
-	if nil == customTitles || 0 == len(titles) { // if custom titles are not provided, use json keys as titles
+	if nil == customTitles || 0 == len(customTitles) { // if custom titles are not provided, use json keys as titles
 		titles = getKeys(jsonArray[0])
-	} else { // if custom titles are provided, sort json array
-		for tid, title := range titles {
+	}
+
+	if nil != rowSpanTitles && 0 != len(rowSpanTitles) { // if sort keys are provided, sort json array
+		for tid, title := range rowSpanTitles {
 			swapped := true
 			for swapped {
 				swapped = false
@@ -33,8 +36,8 @@ func JSON2HtmlTable(jsonStr string, customTitles []string) (bool, string) {
 					}
 					if strings.Compare(va, vb) > 0 {
 						if tid != 0 {
-							va, _ := jsonArray[i][titles[tid-1]].(string)
-							vb, _ := jsonArray[i+1][titles[tid-1]].(string)
+							va, _ := jsonArray[i][rowSpanTitles[tid-1]].(string)
+							vb, _ := jsonArray[i+1][rowSpanTitles[tid-1]].(string)
 							if va != vb {
 								continue
 							}
@@ -59,12 +62,57 @@ func JSON2HtmlTable(jsonStr string, customTitles []string) (bool, string) {
 	thCon := strings.Join(tmp, "")
 
 	// convert table cells
+	segs := map[string][]int{}
+	initSeg := []int{0, len(jsonArray)}
+	for i, key := range rowSpanTitles {
+		seg := initSeg
+		for j:=1; j<len(jsonArray); j++ {
+			if jsonArray[j][key] != jsonArray[j-1][key] {
+				inSlice := false
+				for _, k := range seg {
+					if k == j {
+						inSlice = true
+					}
+				}
+				if !inSlice {
+					seg = append(seg, j)
+				}
+			}
+		}
+		sort.Ints(seg)
+		segs[rowSpanTitles[i]] = seg
+		if i < len(rowSpanTitles) - 1 {
+			segs[rowSpanTitles[i+1]] = segs[key]
+			initSeg = segs[key]
+		}
+	}
 	rows := []string{}
-	for _, jsonObj := range jsonArray {
+	for i, jsonObj := range jsonArray {
 		tmp = []string{}
 		for _, key := range titles {
-			cell := fmt.Sprintf("<td>%v</td>", jsonObj[key])
-			tmp = append(tmp, cell)
+			seg := segs[key]
+			if seg != nil && len(seg) != 0 {
+				if 0 == i {
+					cell := fmt.Sprintf(`<td rowspan="%d">%v</td>`, seg[1], jsonObj[key])
+					tmp = append(tmp, cell)
+				} else {
+					for n, j := range seg {
+						if j == i {
+							rowspan := 1
+							if n < len(seg)-1 {
+								rowspan = seg[n+1] - seg[n]
+							}
+							cell := fmt.Sprintf(`<td rowspan="%d">%v</td>`, rowspan, jsonObj[key])
+							tmp = append(tmp, cell)
+						}
+					}
+				}
+			} else {
+				cell := fmt.Sprintf("<td>%v</td>", jsonObj[key])
+				tmp = append(tmp, cell)
+			}
+			//cell := fmt.Sprintf("<td>%v</td>", jsonObj[key])
+			//tmp = append(tmp, cell)
 		}
 		tdCon := strings.Join(tmp, "")
 		row := fmt.Sprintf("<tr>%s</tr>", tdCon)
